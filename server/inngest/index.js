@@ -7,7 +7,7 @@ export const inngest = new Inngest({ id: "Operon" });
 // Function: Sync User Creation
 const syncUserCreation = inngest.createFunction(
     { id: "sync-user-from-clerk" },
-    { event: "clear/user.created" },
+    { event: "clerk/user.created" },
     async ({ event }) => {
         const data = event?.data;
         await prisma.user.create({
@@ -24,7 +24,7 @@ const syncUserCreation = inngest.createFunction(
 // Function: Sync User Deletion
 const syncUserDeletion = inngest.createFunction(
     { id: "delete-user-from-clerk" },
-    { event: "clear/user.deleted" },
+    { event: "clerk/user.deleted" },
     async ({ event }) => {
         const data = event?.data;
         await prisma.user.delete({
@@ -38,7 +38,7 @@ const syncUserDeletion = inngest.createFunction(
 // Function: Sync User Update
 const syncUserUpdation = inngest.createFunction(
     { id: "update-user-from-clerk" },
-    { event: "clear/user.updated" },
+    { event: "clerk/user.updated" },
     async ({ event }) => {
         const data = event?.data;
         await prisma.user.update({
