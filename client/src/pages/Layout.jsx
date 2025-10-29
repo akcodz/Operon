@@ -1,37 +1,66 @@
-import { useState, useEffect } from 'react'
-import Navbar from '../components/Navbar'
-import Sidebar from '../components/Sidebar'
-import { Outlet } from 'react-router-dom'
-import { useDispatch, useSelector } from 'react-redux'
-import { loadTheme } from '../features/themeSlice'
-import { Loader2Icon } from 'lucide-react'
-import {useUser,SignIn} from "@clerk/clerk-react";
+import { useState, useEffect } from 'react';
+import Navbar from '../components/Navbar';
+import Sidebar from '../components/Sidebar';
+import { Outlet } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
+import { loadTheme } from '../features/themeSlice';
+import { Loader2Icon } from 'lucide-react';
+import { useUser, SignIn, useAuth, CreateOrganization } from '@clerk/clerk-react';
+import { fetchWorkspaces } from '../features/workspaceSlice.js';
 
 const Layout = () => {
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-    const { loading } = useSelector((state) => state.workspace)
-    const dispatch = useDispatch()
-    const {user,isLoaded} = useUser()
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const { loading, workspaces } = useSelector((state) => state.workspace);
+    const dispatch = useDispatch();
+    const { user, isLoaded } = useUser();
+    const { getToken } = useAuth();
 
-    // Initial load of theme
+    // Load theme once
     useEffect(() => {
-        dispatch(loadTheme())
-    }, [])
+        dispatch(loadTheme());
+    }, [dispatch]);
 
-    if(!user){
+    // Fetch workspaces when ready
+    useEffect(() => {
+        if (isLoaded && user && workspaces.length === 0) {
+            dispatch(fetchWorkspaces({ getToken }));
+        }
+    }, [dispatch, user, isLoaded, workspaces.length, getToken]);
+
+    // ✅ Conditional UI rendering below all hooks
+    if (!isLoaded) {
         return (
-            <div className='flex justify-center items-center h-screen bg-white dark:bg-zinc-950'>
-                <SignIn />
+            <div className="flex items-center justify-center h-screen bg-white dark:bg-zinc-950">
+                <Loader2Icon className="size-7 text-blue-500 animate-spin" />
             </div>
-        )
+        );
     }
 
-    if (loading) return (
-        <div className='flex items-center justify-center h-screen bg-white dark:bg-zinc-950'>
-            <Loader2Icon className="size-7 text-blue-500 animate-spin" />
-        </div>
-    )
+    if (!user) {
+        return (
+            <div className="flex justify-center items-center h-screen bg-white dark:bg-zinc-950">
+                <SignIn />
+            </div>
+        );
+    }
 
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-white dark:bg-zinc-950">
+                <Loader2Icon className="size-7 text-blue-500 animate-spin" />
+            </div>
+        );
+    }
+
+    if (user && workspaces.length === 0) {
+        return (
+            <div className="min-h-screen flex justify-center items-center">
+                <CreateOrganization />
+            </div>
+        );
+    }
+
+    // ✅ Normal layout render
     return (
         <div className="flex bg-white dark:bg-zinc-950 text-gray-900 dark:text-slate-100">
             <Sidebar isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} />
@@ -42,7 +71,7 @@ const Layout = () => {
                 </div>
             </div>
         </div>
-    )
-}
+    );
+};
 
-export default Layout
+export default Layout;

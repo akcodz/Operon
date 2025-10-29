@@ -1,9 +1,24 @@
-import { createSlice } from "@reduxjs/toolkit";
-import { dummyWorkspaces } from "../assets/assets";
+import {createAsyncThunk, createSlice} from "@reduxjs/toolkit";
+import api from "../configs/api.js";
+
+
+export const fetchWorkspaces = createAsyncThunk('workspaces/fetchWorkspaces', async ({getToken}) => {
+try{
+const {data} = await api.get(`/api/workspaces`,{
+    headers: {
+        Authorization: `Bearer ${await getToken()}`
+    }
+});
+return data.workspaces || []
+}catch(error){
+console.error(error);
+return []
+}
+});
 
 const initialState = {
-    workspaces: dummyWorkspaces || [],
-    currentWorkspace: dummyWorkspaces[1],
+    workspaces: [],
+    currentWorkspace: null,
     loading: false,
 };
 
@@ -102,6 +117,45 @@ const workspaceSlice = createSlice({
                 } : w
             );
         }
+
+    },
+    extraReducers:(builder) => {
+        builder.addCase(fetchWorkspaces.pending, (state) => {
+            state.loading = true;
+        })
+        builder.addCase(fetchWorkspaces.fulfilled, (state, action) => {
+            // Assign payload to state
+            state.workspaces = action.payload;
+
+            // Only proceed if payload is non-empty
+            if (action.payload.length > 0) {
+                const localStorageCurrentWorkspaceId = localStorage.getItem('currentWorkspaceId');
+
+                if (localStorageCurrentWorkspaceId) {
+                    // Try to find the workspace that matches the stored ID
+                    const foundWorkspace = action.payload.find(
+                        (w) => w.id === localStorageCurrentWorkspaceId
+                    );
+
+                    if (foundWorkspace) {
+                        // If found, set as current workspace
+                        state.currentWorkspace = foundWorkspace;
+                    } else {
+                        // If not found, default to the first workspace
+                        state.currentWorkspace = action.payload[0];
+                        localStorage.setItem('currentWorkspaceId', action.payload[0].id);
+                    }
+                } else {
+                    // If there’s no stored ID, set the first workspace as current
+                    state.currentWorkspace = action.payload[0];
+                    localStorage.setItem('currentWorkspaceId', action.payload[0].id);
+                }
+            }
+            state.loading = false;
+        });
+        builder.addCase(fetchWorkspaces.rejected, (state) => {
+            state.loading = false;
+        })
 
     }
 });
