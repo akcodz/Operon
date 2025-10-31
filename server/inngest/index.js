@@ -1,5 +1,6 @@
 import { Inngest } from "inngest";
 import prisma from "../config/prisma.js";
+import sendEmail from "../config/nodemailer.js";
 
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "Operon" });
@@ -33,7 +34,6 @@ const syncUserDeletion = inngest.createFunction(
     async ({ event }) => {
         console.log(event);
         const data = event?.data;
-
         await prisma.user.delete({
             where: { id: data?.id },
         });
@@ -139,6 +139,107 @@ const syncWorkspaceMemberCreation = inngest.createFunction(
     }
 );
 
+
+export const sendTaskAssignmentEmail = inngest.createFunction(
+    { id: "send-task-assignment-mail" },
+    { event: "app/task.assigned" },
+    async ({ event, step }) => {
+        const { taskId, origin } = event.data;
+
+        // Fetch task with relations
+        const task = await prisma.task.findUnique({
+            where: { id: taskId },
+            include: { assignee: true, project: true },
+        });
+
+        if (!task || !task.assignee) return;
+
+        // --- Step 1: Send assignment email ---
+        await sendEmail({
+            to: task.assignee.email,
+            subject: `New Task Assignment in ${task.project.name}`,
+            body: `
+        <div style="font-family: Arial, sans-serif; color: #333;">
+          <h2>Hi ${task.assignee.name},</h2>
+          <p style="font-size: 16px;">You've been assigned a new task:</p>
+
+          <div style="border: 1px solid #ddd; padding: 12px 16px; border-radius: 6px; margin-bottom: 30px;">
+            <p style="font-size: 18px; font-weight: bold; color: #007bff; margin: 8px 0;">
+              ${task.title}
+            </p>
+            <p style="margin: 6px 0;"><strong>Description:</strong> ${task.description || "No description provided"}</p>
+            <p style="margin: 6px 0;"><strong>Due Date:</strong> ${
+                task.due_date
+                    ? new Date(task.due_date).toLocaleDateString()
+                    : "No due date"
+            }</p>
+          </div>
+
+          <a href="${origin}"
+             style="background-color: #007bff; padding: 12px 24px; border-radius: 5px; color: #fff; font-weight: 600; font-size: 16px; text-decoration: none;">
+            View Task
+          </a>
+
+          <p style="margin-top: 20px; font-size: 14px; color: #6c757d;">
+            Please make sure to review and complete it before the due date.
+          </p>
+        </div>
+      `,
+        });
+
+        // --- Step 2: Schedule reminder if not due today ---
+        if (
+            task.due_date &&
+            new Date(task.due_date).toDateString() !== new Date().toDateString()
+        ) {
+            await step.sleepUntil("wait-for-the-due-date", new Date(task.due_date));
+
+            await step.run("check-if-task-is-complete", async () => {
+                const updatedTask = await prisma.task.findUnique({
+                    where: { id: taskId },
+                    include: { assignee: true, project: true },
+                });
+
+                if (!updatedTask || updatedTask.status === "DONE") return;
+
+                await step.run("send-task-reminder-mail", async () => {
+                    await sendEmail({
+                        to: updatedTask.assignee.email,
+                        subject: `Reminder: Task Due in ${updatedTask.project.name}`,
+                        body: `
+              <div style="max-width: 600px; font-family: Arial, sans-serif; color: #333;">
+                <h2 style="color: #007bff;">Task Reminder</h2>
+                <p style="font-size: 16px;">
+                  You have a pending task due in <strong>${updatedTask.project.name}</strong>:
+                </p>
+
+                <h3 style="font-size: 18px; font-weight: bold; color: #007bff; margin: 8px 0;">
+                  ${updatedTask.title}
+                </h3>
+
+                <div style="border: 1px solid #ddd; padding: 12px 16px; border-radius: 6px; margin-bottom: 30px;">
+                  <p style="margin: 6px 0;"><strong>Description:</strong> ${updatedTask.description || "No description provided"}</p>
+                  <p style="margin: 6px 0;"><strong>Due Date:</strong> ${new Date(updatedTask.due_date).toLocaleDateString()}</p>
+                </div>
+
+                <a href="${origin}"
+                   style="background-color: #007bff; padding: 12px 24px; border-radius: 5px; color: #fff;
+                          font-weight: 600; font-size: 16px; text-decoration: none;">
+                  View Task
+                </a>
+
+                <p style="margin-top: 20px; font-size: 14px; color: #6c757d;">
+                  Please make sure to complete it as soon as possible.
+                </p>
+              </div>
+            `,
+                    });
+                });
+            });
+        }
+    }
+);
+
 /* -----------------------------------------------------
  * EXPORT FUNCTIONS
  * --------------------------------------------------- */
@@ -151,4 +252,5 @@ export const functions = [
     syncWorkspaceDeletion,
     syncWorkspaceUpdation,
     syncWorkspaceMemberCreation,
+    sendTaskAssignmentEmail
 ];

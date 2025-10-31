@@ -26,7 +26,10 @@ export const getUserWorkspaces= async (req, res) =>{
                             include: {
                                 assignee: true,
                                 comments: {
+                                    include:{
                                     user: true, // Include user info for each comment
+                                
+                                    }
                                 },
                             },
                         },
@@ -48,7 +51,6 @@ export const getUserWorkspaces= async (req, res) =>{
         console.error("Error fetching workspaces:", error);
 
         return res.status(500).json({
-            success: false,
             message: error.message,
         });
     }
