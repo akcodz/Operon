@@ -1,9 +1,15 @@
 import { useState } from "react";
 import { Calendar as CalendarIcon } from "lucide-react";
-import { useSelector } from "react-redux";
+import {useDispatch, useSelector} from "react-redux";
 import { format } from "date-fns";
+import {useAuth} from "@clerk/clerk-react";
+import api from "../configs/api.js";
+import toast from "react-hot-toast";
+import {addTask} from "../features/workspaceSlice.js";
 
 export default function CreateTaskDialog({ showCreateTask, setShowCreateTask, projectId }) {
+    const {getToken} = useAuth()
+    const dispatch = useDispatch();
     const currentWorkspace = useSelector((state) => state.workspace?.currentWorkspace || null);
     const project = currentWorkspace?.projects.find((p) => p.id === projectId);
     const teamMembers = project?.members || [];
@@ -21,9 +27,46 @@ export default function CreateTaskDialog({ showCreateTask, setShowCreateTask, pr
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setIsSubmitting(true);
 
+        try {
+            const token = await getToken();
+            const { data } = await api.post(
+                "/api/tasks",
+                {
+                    ...formData,
+                    workspaceId: currentWorkspace.id,
+                    projectId:project.id,
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
 
+            dispatch(addTask(data.taskWithAssignee));
+            toast.success(data.message || "Task created successfully!");
+
+            setShowCreateTask(false);
+
+            setFormData({
+                title: "",
+                description: "",
+                type: "TASK",
+                status: "TODO",
+                priority: "MEDIUM",
+                assigneeId: "",
+                dueDate: "",
+            });
+        } catch (error) {
+            console.error(error);
+            toast.error(error?.response?.data?.message || error.message || "Failed to create task.");
+        } finally {
+            setIsSubmitting(false);
+        }
     };
+
 
     return showCreateTask ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 dark:bg-black/60 backdrop-blur">

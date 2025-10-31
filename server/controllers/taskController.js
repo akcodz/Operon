@@ -73,8 +73,6 @@ export const updateTask = async (req, res) => {
     try {
         const { userId } = req.auth();
         const {id} = req.params;
-        const { projectId, title, description,type, status, priority, due_date, assigneeId } = req.body;
-        const origin =req.get('origin');
 
         // Fetch task with project relation
         const task = await prisma.task.findUnique({
@@ -93,40 +91,18 @@ export const updateTask = async (req, res) => {
                     }
                 }
         }});
-        // Check if the user is admin or team lead
-        const isAdmin = workspace.members.some(
-            (member) => member.userId === userId && member.role === "ADMIN"
-        );
 
-        if (!isAdmin && project.team_lead !== userId) {
+
+        if (project.team_lead !== userId) {
             return res.status(403).json({
                 message: "You don't have permission to update this task."
-            });
-        }
-
-        // Validate assignee
-        if (
-            assigneeId &&
-            !project.members.find((member) => member.user.id === assigneeId)
-        ) {
-            return res.status(400).json({
-                message: "Assignee must be a member of this project."
             });
         }
 
         // Update the task
         const updatedTask = await prisma.task.update({
             where: { id },
-            data: {
-                title,
-                projectId,
-                description,
-                status,
-                type,
-                priority,
-                due_date: due_date ? new Date(due_date) : null,
-                assigneeId: assigneeId || null
-            }
+            data:req.body
         });
 
         return res.json({
